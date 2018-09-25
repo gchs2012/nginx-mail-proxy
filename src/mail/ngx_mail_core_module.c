@@ -85,6 +85,29 @@ static ngx_command_t  ngx_mail_core_commands[] = {
       offsetof(ngx_mail_core_srv_conf_t, resolver_timeout),
       NULL },
 
+    /* BEGIN: Added by zc, 2018/9/25 */
+    { ngx_string("mail_tproxy"),
+      NGX_MAIL_SRV_CONF|NGX_CONF_FLAG,
+      ngx_conf_set_flag_slot,
+      NGX_MAIL_SRV_CONF_OFFSET,
+      offsetof(ngx_mail_core_srv_conf_t, mail_tproxy),
+      NULL },
+
+    { ngx_string("mail_upstream_ip"),
+      NGX_MAIL_SRV_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_MAIL_SRV_CONF_OFFSET,
+      offsetof(ngx_mail_core_srv_conf_t, mail_upstream_ip),
+      NULL },
+
+    { ngx_string("mail_upstream_port"),
+      NGX_MAIL_SRV_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_MAIL_SRV_CONF_OFFSET,
+      offsetof(ngx_mail_core_srv_conf_t, mail_upstream_port),
+      NULL },
+    /* END:   Added by zc, 2018/9/25 */
+
       ngx_null_command
 };
 
@@ -168,6 +191,12 @@ ngx_mail_core_create_srv_conf(ngx_conf_t *cf)
     cscf->file_name = cf->conf_file->file.name.data;
     cscf->line = cf->conf_file->line;
 
+    /* BEGIN: Added by zc, 2018/9/25 */
+    cscf->mail_tproxy = NGX_CONF_UNSET;
+    ngx_str_null(&cscf->mail_upstream_ip);
+    ngx_str_null(&cscf->mail_upstream_port);
+    /* END:   Added by zc, 2018/9/25 */
+
     return cscf;
 }
 
@@ -205,6 +234,10 @@ ngx_mail_core_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
     }
 
     ngx_conf_merge_ptr_value(conf->resolver, prev->resolver, NULL);
+
+    /* BEGIN: Added by zc, 2018/9/25 */
+    ngx_conf_merge_value(conf->mail_tproxy, prev->mail_tproxy, 0);
+    /* END:   Added by zc, 2018/9/25 */
 
     return NGX_CONF_OK;
 }

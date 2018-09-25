@@ -798,9 +798,94 @@ ngx_mail_auth(ngx_mail_session_t *s, ngx_connection_t *c)
         ngx_del_timer(c->read);
     }
 
-    s->login_attempt++;
+    /* BEGIN: Added by zc, 2018/9/25 */
+    size_t                     len;
+    u_char                     text[NGX_SOCKADDR_STRLEN];
+    ngx_int_t                  rc;
+    ngx_int_t                  port;
+    ngx_addr_t                *peer;
+    ngx_mail_core_srv_conf_t  *cscf;
+    struct sockaddr_in        *sin;
+#if (NGX_HAVE_INET6)
+    struct sockaddr_in6       *sin6;
+#endif
 
-    ngx_mail_auth_http_init(s);
+    cscf = ngx_mail_get_module_srv_conf(s, ngx_mail_core_module);
+
+    /* 如果配置上游服务器IP和端口，则直接与上游服务器建立连接，跳过本地认证 */
+    if (cscf->mail_upstream_ip.len != 0 &&
+        cscf->mail_upstream_port.len != 0) {
+
+        /* 解析上游服务器配置端口 */
+        port = ngx_atoi(cscf->mail_upstream_port.data,
+                        cscf->mail_upstream_port.len);
+        if (port == NGX_ERROR || port < 1 || port > 65535) {
+            ngx_log_error(NGX_LOG_ERR, c->log, 0,
+                          "mail_upstream_port(%V) invaild",
+                          &(cscf->mail_upstream_port));
+            ngx_mail_session_internal_server_error(s);
+            return;
+        }
+
+        peer = ngx_pcalloc(c->pool, sizeof(ngx_addr_t));
+        if (peer == NULL) {
+            ngx_log_error(NGX_LOG_ERR, c->log, 0,
+                          "ngx_pcalloc(ngx_addr_t) failed");
+            ngx_mail_session_internal_server_error(s);
+            return;
+        }
+
+        /* 解析上游服务器配置IP */
+        rc = ngx_parse_addr(c->pool, peer,
+                            cscf->mail_upstream_ip.data,
+                            cscf->mail_upstream_ip.len);
+        if (rc != NGX_OK) {
+            ngx_log_error(NGX_LOG_ERR, c->log, 0,
+                          "ngx_parse_addr(%V) failed",
+                          &(cscf->mail_upstream_ip));
+            ngx_mail_session_internal_server_error(s);
+            return;
+        }
+
+        switch (peer->sockaddr->sa_family) {
+#if (NGX_HAVE_INET6)
+        case AF_INET6:
+            sin6 = (struct sockaddr_in6 *)peer->sockaddr;
+            sin6->sin6_port = htons((in_port_t)port);
+            break;
+#endif
+        default: /* AF_INET */
+            sin = (struct sockaddr_in *)peer->sockaddr;
+            sin->sin_port = htons((in_port_t)port);
+            break;
+        }
+
+        len = ngx_sock_ntop(peer->sockaddr, peer->socklen,
+                            text, NGX_SOCKADDR_STRLEN, 1);
+        peer->name.data = ngx_pnalloc(c->pool, len);
+        if (peer->name.data == NULL) {
+            ngx_log_error(NGX_LOG_ERR, c->log, 0,
+                          "ngx_pnalloc() failed");
+            ngx_mail_session_internal_server_error(s);
+            return;
+        }
+
+        peer->name.len = len;
+        ngx_memcpy(peer->name.data, text, len);
+        text[len] = '\0';
+
+        ngx_log_debug1(NGX_LOG_DEBUG_MAIL, c->log, 0,
+                       "mail upstream server [ip:port = %s]", text);
+
+        /* nginx与上游服务器建立连接并初始化 */
+        ngx_mail_proxy_init(s, peer);
+    }
+    /* END:   Added by zc, 2018/9/25 */
+    else {
+        s->login_attempt++;
+
+        ngx_mail_auth_http_init(s);
+    }
 }
 
 

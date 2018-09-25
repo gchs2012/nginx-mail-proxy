@@ -118,6 +118,12 @@ typedef struct {
     ngx_resolver_t         *resolver;
     ngx_log_t              *error_log;
 
+    /* BEGIN: Added by zc, 2018/9/25 */
+    ngx_flag_t              mail_tproxy;          /* 邮件透明代理开关 */
+    ngx_str_t               mail_upstream_ip;     /* 上游邮件服务器地址 */
+    ngx_str_t               mail_upstream_port;   /* 上游邮件服务器端口 */
+    /* END:   Added by zc, 2018/9/25 */
+
     /* server ctx */
     ngx_mail_conf_ctx_t    *ctx;
 
