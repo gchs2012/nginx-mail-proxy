@@ -5,4 +5,4 @@
 
 *** 以下配置方式仅支持非SSH和非STARTLS认证 ***
 
-！[照片1](https://github.com/gchs2012/nginx-mail-proxy/blob/master/conf/照片1.png)
+![照片1](https://github.com/gchs2012/nginx-mail-proxy/blob/master/conf/照片1.png)
