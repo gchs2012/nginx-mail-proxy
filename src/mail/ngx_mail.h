@@ -119,9 +119,15 @@ typedef struct {
     ngx_log_t              *error_log;
 
     /* BEGIN: Added by zc, 2018/9/25 */
-    ngx_flag_t              mail_tproxy;          /* 邮件透明代理开关 */
-    ngx_str_t               mail_upstream_ip;     /* 上游邮件服务器地址 */
-    ngx_str_t               mail_upstream_port;   /* 上游邮件服务器端口 */
+    ngx_flag_t              mail_tproxy;               /**< 邮件透明代理开关 */
+    ngx_str_t               mail_upstream_ip;          /**< 上游邮件服务器地址 */
+    ngx_str_t               mail_upstream_port;        /**< 上游邮件服务器端口 */
+#if (NGX_MAIL_SSL)
+    ngx_flag_t              mail_proxy_ssl;            /**< nginx与上游连接是否开启SSL */
+    ngx_flag_t              mail_proxy_starttls;       /**< nginx与上游连接是否开启STARTTLS */
+    ngx_uint_t              mail_proxy_ssl_protocols;  /**< SSL协议，例如: SSLv2等 */
+    ngx_str_t               mail_proxy_ssl_ciphers;    /**< SSL加密方式，例如: RC4+RSA等 */
+#endif
     /* END:   Added by zc, 2018/9/25 */
 
     /* server ctx */
@@ -177,6 +183,12 @@ typedef enum {
 typedef struct {
     ngx_peer_connection_t   upstream;
     ngx_buf_t              *buffer;
+
+    /* BEGIN: Added by zhangcan, 2018/9/26 */
+#if (NGX_MAIL_SSL)
+    ngx_ssl_t              *ssl;
+#endif
+    /* END:   Added by zhangcan, 2018/9/26 */
 } ngx_mail_proxy_ctx_t;
 
 
@@ -208,6 +220,14 @@ typedef struct {
     unsigned                esmtp:1;
     unsigned                auth_method:3;
     unsigned                auth_wait:1;
+
+    /* BEGIN: Added by zc, 2018/9/26 */
+    /*
+     * 0 - 上游无ESMTP
+     * 1 - 上游支持ESMTP
+     */
+    unsigned                proxy_esmtp:1;
+    /* END:   Added by zc, 2018/9/26 */
 
     ngx_str_t               login;
     ngx_str_t               passwd;

@@ -25,6 +25,24 @@ static char *ngx_mail_core_error_log(ngx_conf_t *cf, ngx_command_t *cmd,
     void *conf);
 static char *ngx_mail_core_resolver(ngx_conf_t *cf, ngx_command_t *cmd,
     void *conf);
+/* BEGIN: Added by zc, 2018/9/26 */
+static char *ngx_mail_core_starttls(ngx_conf_t *cf, ngx_command_t *cmd,
+    void *conf);
+/* END:   Added by zc, 2018/9/26 */
+
+
+/* BEGIN: Added by zc, 2018/9/26 */
+#if (NGX_MAIL_SSL)
+static ngx_conf_bitmask_t  ngx_mail_proxy_ssl_protocols[] = {
+    { ngx_string("SSLv2"), NGX_SSL_SSLv2 },
+    { ngx_string("SSLv3"), NGX_SSL_SSLv3 },
+    { ngx_string("TLSv1"), NGX_SSL_TLSv1 },
+    { ngx_string("TLSv1.1"), NGX_SSL_TLSv1_1 },
+    { ngx_string("TLSv1.2"), NGX_SSL_TLSv1_2 },
+    { ngx_null_string, 0 }
+};
+#endif
+/* END:   Added by zc, 2018/9/26 */
 
 
 static ngx_command_t  ngx_mail_core_commands[] = {
@@ -106,6 +124,36 @@ static ngx_command_t  ngx_mail_core_commands[] = {
       NGX_MAIL_SRV_CONF_OFFSET,
       offsetof(ngx_mail_core_srv_conf_t, mail_upstream_port),
       NULL },
+
+#if (NGX_MAIL_SSL)
+    { ngx_string("mail_proxy_ssl"),
+      NGX_MAIL_SRV_CONF|NGX_CONF_FLAG,
+      ngx_conf_set_flag_slot,
+      NGX_MAIL_SRV_CONF_OFFSET,
+      offsetof(ngx_mail_core_srv_conf_t, mail_proxy_ssl),
+      NULL },
+
+    { ngx_string("mail_proxy_starttls"),
+      NGX_MAIL_SRV_CONF|NGX_CONF_FLAG,
+      ngx_mail_core_starttls,
+      NGX_MAIL_SRV_CONF_OFFSET,
+      offsetof(ngx_mail_core_srv_conf_t, mail_proxy_starttls),
+      NULL },
+
+    { ngx_string("mail_proxy_ssl_protocols"),
+      NGX_MAIL_SRV_CONF|NGX_CONF_1MORE,
+      ngx_conf_set_bitmask_slot,
+      NGX_MAIL_SRV_CONF_OFFSET,
+      offsetof(ngx_mail_core_srv_conf_t, mail_proxy_ssl_protocols),
+      &ngx_mail_proxy_ssl_protocols },
+
+    { ngx_string("mail_proxy_ssl_ciphers"),
+      NGX_MAIL_SRV_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_MAIL_SRV_CONF_OFFSET,
+      offsetof(ngx_mail_core_srv_conf_t, mail_proxy_ssl_ciphers),
+      NULL },
+#endif
     /* END:   Added by zc, 2018/9/25 */
 
       ngx_null_command
@@ -195,6 +243,12 @@ ngx_mail_core_create_srv_conf(ngx_conf_t *cf)
     cscf->mail_tproxy = NGX_CONF_UNSET;
     ngx_str_null(&cscf->mail_upstream_ip);
     ngx_str_null(&cscf->mail_upstream_port);
+#if (NGX_MAIL_SSL)
+    cscf->mail_proxy_ssl = NGX_CONF_UNSET;
+    cscf->mail_proxy_starttls = NGX_CONF_UNSET;
+    cscf->mail_proxy_ssl_protocols = 0;
+    ngx_str_null(&(cscf->mail_proxy_ssl_ciphers));
+#endif    
     /* END:   Added by zc, 2018/9/25 */
 
     return cscf;
@@ -237,6 +291,10 @@ ngx_mail_core_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
 
     /* BEGIN: Added by zc, 2018/9/25 */
     ngx_conf_merge_value(conf->mail_tproxy, prev->mail_tproxy, 0);
+ #if (NGX_MAIL_SSL)
+    ngx_conf_merge_value(conf->mail_proxy_ssl, prev->mail_proxy_ssl, 0);
+    ngx_conf_merge_value(conf->mail_proxy_starttls, prev->mail_proxy_starttls, 0);
+ #endif
     /* END:   Added by zc, 2018/9/25 */
 
     return NGX_CONF_OK;
@@ -675,3 +733,38 @@ ngx_mail_capabilities(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     return NGX_CONF_OK;
 }
+
+/* BEGIN: Added by zc, 2018/9/26 */
+/*****************************************************************************
+    函 数 名 : ngx_mail_core_starttls
+    功能描述 : 解析 mail_proxy_starttls 命令
+    输入参数 : ngx_conf_t *cf
+               ngx_command_t *cmd
+               void *conf
+    输出参数 : 无
+    返 回 值 : char *
+    作    者 : zc
+    日    期 : 2018年9月26日
+*****************************************************************************/
+static char *
+ngx_mail_core_starttls(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    char                      *rv;
+    ngx_mail_core_srv_conf_t  *scf = conf;
+
+    rv = ngx_conf_set_flag_slot(cf, cmd, conf);
+    if (rv != NGX_CONF_OK) {
+        return rv;
+    }
+
+    if (scf->mail_proxy_ssl && scf->mail_proxy_starttls) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                           "\"mail proxy ssl\" directive conflicts with "
+                           "\"mail proxy starttls\"");
+        return NGX_CONF_ERROR;
+    }
+
+    return NGX_CONF_OK;
+}
+/* END:   Added by zc, 2018/9/26 */
+

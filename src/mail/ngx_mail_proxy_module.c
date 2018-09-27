@@ -108,6 +108,231 @@ ngx_module_t  ngx_mail_proxy_module = {
 static u_char  smtp_auth_ok[] = "235 2.0.0 OK" CRLF;
 
 
+/*****************************************************************************
+    函 数 名 : ngx_mail_proxy_protocol_handler
+    功能描述 : 根据用户请求的协议设置实际的邮件认证处理函数
+    输入参数 : ngx_mail_session_t *s
+               ngx_connection_t *c
+    输出参数 : 无
+    返 回 值 : 无
+    作    者 : zc
+    日    期 : 2018年9月26日
+*****************************************************************************/
+static void
+ngx_mail_proxy_protocol_handler(ngx_mail_session_t *s, ngx_connection_t *c)
+{
+    switch (s->protocol) {
+
+    case NGX_MAIL_POP3_PROTOCOL:
+        c->read->handler = ngx_mail_proxy_pop3_handler;
+        s->mail_state = ngx_pop3_start;
+        break;
+
+    case NGX_MAIL_IMAP_PROTOCOL:
+        c->read->handler = ngx_mail_proxy_imap_handler;
+        s->mail_state = ngx_imap_start;
+        break;
+
+    default: /* NGX_MAIL_SMTP_PROTOCOL */
+        c->read->handler = ngx_mail_proxy_smtp_handler;
+        s->mail_state = ngx_smtp_start;
+        break;
+    }
+}
+
+
+#if (NGX_MAIL_SSL)
+/*****************************************************************************
+    函 数 名 : ngx_mail_proxy_ssl_handshake_handler
+    功能描述 : nginx与上游邮件服务器SSL握手
+    输入参数 : ngx_connection_t *c
+    输出参数 : 无
+    返 回 值 : 无
+    作    者 : zc
+    日    期 : 2018年9月26日
+*****************************************************************************/
+static void
+ngx_mail_proxy_ssl_handshake_handler(ngx_connection_t *c)
+{
+    u_char                    *p;
+    ngx_str_t                  line;
+    ngx_mail_session_t        *s;
+    ngx_mail_core_srv_conf_t  *cscf;
+
+    s = c->data;
+
+    cscf = ngx_mail_get_module_srv_conf(s, ngx_mail_core_module);
+
+    if (c->ssl->handshaked) {
+        c->write->handler = ngx_mail_proxy_dummy_handler;
+
+        /* STARTTLS方式且协议为SMTP */
+        if (cscf->mail_proxy_starttls &&
+            s->protocol == NGX_MAIL_SMTP_PROTOCOL) {
+
+            /* STARTTLS交互完成后，需要向上游发送EHLO命令 */
+            line.len = sizeof("HELO ")	- 1 + s->smtp_helo.len + 2;
+            line.data = ngx_pnalloc(c->pool, line.len);
+            if (line.data == NULL) {
+                ngx_mail_proxy_internal_server_error(s);
+                return;
+            }
+
+            p = ngx_cpymem(line.data,
+                           (s->proxy_esmtp ? "EHLO " : "HELO "),
+                           sizeof("HELO ") - 1);
+            p = ngx_cpymem(p, s->smtp_helo.data, s->smtp_helo.len);
+            *p++ = CR; *p = LF;
+
+            if (c->send(c, line.data, line.len) < (ssize_t) line.len) {
+                /*
+                 * we treat the incomplete sending as NGX_ERROR
+                 * because it is very strange here
+                 */
+                ngx_mail_proxy_internal_server_error(s);
+                return;
+            }
+        }
+
+        /* 根据用户请求的协议设置实际的邮件认证处理函数 */
+        ngx_mail_proxy_protocol_handler(s, s->proxy->upstream.connection);
+    }
+}
+
+
+/*****************************************************************************
+    函 数 名 : ngx_mail_proxy_ssl_init_connection
+    功能描述 : nginx与上游邮件服务器连接SSL初始化
+    输入参数 : ngx_mail_session_t *s
+    输出参数 : 无
+    返 回 值 : ngx_int_t
+    作    者 : zc
+    日    期 : 2018年9月26日
+*****************************************************************************/
+static ngx_int_t
+ngx_mail_proxy_ssl_init_connection(ngx_mail_session_t *s)
+{
+    ngx_int_t          rc;
+    ngx_connection_t  *c = s->proxy->upstream.connection;
+
+    /* 创建SSL连接 */
+    if (ngx_ssl_create_connection(s->proxy->ssl, c,
+                                  NGX_SSL_BUFFER|NGX_SSL_CLIENT)
+                                  != NGX_OK) {
+        if (c->ssl) {
+            if (ngx_ssl_shutdown(c) == NGX_AGAIN) {
+                c->ssl->handler = ngx_mail_close_connection;
+            }
+        }
+        return NGX_ERROR;
+    }
+
+    /* SSL握手 */
+    rc = ngx_ssl_handshake(c);
+    if (rc == NGX_AGAIN) {
+        c->ssl->handler = ngx_mail_proxy_ssl_handshake_handler;
+    }
+
+    ngx_mail_proxy_ssl_handshake_handler(c);
+
+    return NGX_OK;	
+}
+
+
+/*****************************************************************************
+    函 数 名 : ngx_mail_proxy_ssl_set
+    功能描述 : 设置加密方法
+    输入参数 : ngx_mail_session_t *s
+               ngx_mail_core_srv_conf_t *cscf
+    输出参数 : 无
+    返 回 值 : ngx_int_t
+    作    者 : zc
+    日    期 : 2018年9月26日
+*****************************************************************************/
+static ngx_int_t
+ngx_mail_proxy_ssl_set(ngx_mail_session_t *s, ngx_mail_core_srv_conf_t *cscf)
+{
+    ngx_pool_cleanup_t    *cln;
+    ngx_mail_proxy_ctx_t  *p = s->proxy;
+
+    p->ssl = ngx_pcalloc(s->connection->pool, sizeof(ngx_ssl_t));
+    if (p->ssl == NULL) {
+        return NGX_ERROR;
+    }
+
+    p->ssl->log = s->connection->log;
+
+    if (ngx_ssl_create(p->ssl,
+                       cscf->mail_proxy_ssl_protocols,
+                       NULL) != NGX_OK) {
+        goto failed;
+    }
+
+    if (SSL_CTX_set_cipher_list(p->ssl->ctx,
+                               (const char *) cscf->mail_proxy_ssl_ciphers.data)
+                               == 0) {
+        ngx_ssl_error(NGX_LOG_ERR, s->connection->log, 0,
+                      "SSL_CTX_set_cipher_list(\"%V\") failed",
+                      &cscf->mail_proxy_ssl_ciphers);
+        goto failed;
+    }
+
+    cln = ngx_pool_cleanup_add(s->connection->pool, 0);
+    if (cln == NULL) {
+        goto failed;
+    }
+
+    cln->handler = ngx_ssl_cleanup_ctx;
+    cln->data = p->ssl;
+
+    return NGX_OK;
+
+failed:
+    if (p->ssl->ctx) {
+        ngx_ssl_cleanup_ctx(p->ssl->ctx);
+    }
+    ngx_pfree(s->connection->pool, p->ssl);
+
+    return NGX_ERROR;
+}
+
+
+/*****************************************************************************
+    函 数 名 : ngx_mail_proxy_ssl_connection
+    功能描述 : 采用ssl方式与上游建立连接
+    输入参数 : ngx_mail_session_t *s
+    输出参数 : 无
+    返 回 值 : ngx_int_t
+    作    者 : zc
+    日    期 : 2018年9月26日
+*****************************************************************************/
+static ngx_int_t
+ngx_mail_proxy_ssl_connection(ngx_mail_session_t *s)
+{
+    ngx_mail_core_srv_conf_t  *cscf;
+
+    s->connection->log->action = "ssl connecting to upstream";
+
+    cscf = ngx_mail_get_module_srv_conf(s, ngx_mail_core_module);
+
+    /* 设置加密方法 */
+    if (ngx_mail_proxy_ssl_set(s, cscf) != NGX_OK) {
+        return NGX_ERROR;
+    }
+
+    if (s->proxy->upstream.connection->ssl == NULL) {
+
+        /* SSL连接初始化 */
+        if (ngx_mail_proxy_ssl_init_connection(s) != NGX_OK) {
+            return NGX_ERROR;
+        }
+    }
+
+    return NGX_OK;
+}
+#endif
+
+
 void
 ngx_mail_proxy_init(ngx_mail_session_t *s, ngx_addr_t *peer)
 {
@@ -161,23 +386,19 @@ ngx_mail_proxy_init(ngx_mail_session_t *s, ngx_addr_t *peer)
 
     s->out.len = 0;
 
-    switch (s->protocol) {
-
-    case NGX_MAIL_POP3_PROTOCOL:
-        p->upstream.connection->read->handler = ngx_mail_proxy_pop3_handler;
-        s->mail_state = ngx_pop3_start;
-        break;
-
-    case NGX_MAIL_IMAP_PROTOCOL:
-        p->upstream.connection->read->handler = ngx_mail_proxy_imap_handler;
-        s->mail_state = ngx_imap_start;
-        break;
-
-    default: /* NGX_MAIL_SMTP_PROTOCOL */
-        p->upstream.connection->read->handler = ngx_mail_proxy_smtp_handler;
-        s->mail_state = ngx_smtp_start;
-        break;
+    /* BEGIN: Added by zc, 2018/9/26 */
+#if (NGX_MAIL_SSL)
+    if (cscf->mail_proxy_ssl) {
+        if (ngx_mail_proxy_ssl_connection(s) != NGX_OK) {
+            ngx_mail_proxy_internal_server_error(s);
+        }
+        return;
     }
+#endif
+
+    /* 根据协议进行具体处理 */
+    ngx_mail_proxy_protocol_handler(s, s->proxy->upstream.connection);
+    /* END:   Added by zc, 2018/9/26 */
 }
 
 
