@@ -1,6 +1,9 @@
 
 # nginx邮件代理
 
+## 编译
+***./configure --prefix=/usr/local/nginx-1.11.10 --with-mail --with-mail_ssl_module<br>***
+
 ## 通过如下配置：下游客户端与上游服务器直接进行认证，跳过本地认证过程
 ![照片0](https://github.com/gchs2012/nginx-mail-proxy/blob/master/image/照片0.png)
 
