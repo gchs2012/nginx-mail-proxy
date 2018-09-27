@@ -2,6 +2,7 @@
 # nginx邮件代理
 
 ## 通过配置直接与上游服务器进行认证，跳过本地认证
+![照片0](https://github.com/gchs2012/nginx-mail-proxy/blob/master/image/照片0.png)
 
 ### 1、下游客户端与nginx普通连接，nginx与上游服务器普通连接
 ![照片1](https://github.com/gchs2012/nginx-mail-proxy/blob/master/image/照片1.png)
