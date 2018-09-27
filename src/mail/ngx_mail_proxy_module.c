@@ -119,7 +119,8 @@ static u_char  smtp_auth_ok[] = "235 2.0.0 OK" CRLF;
     日    期 : 2018年9月26日
 *****************************************************************************/
 static void
-ngx_mail_proxy_protocol_handler(ngx_mail_session_t *s, ngx_connection_t *c)
+ngx_mail_proxy_protocol_handler(ngx_mail_session_t *s,
+    ngx_connection_t *c)
 {
     switch (s->protocol) {
 
@@ -250,7 +251,8 @@ ngx_mail_proxy_ssl_init_connection(ngx_mail_session_t *s)
     日    期 : 2018年9月26日
 *****************************************************************************/
 static ngx_int_t
-ngx_mail_proxy_ssl_set(ngx_mail_session_t *s, ngx_mail_core_srv_conf_t *cscf)
+ngx_mail_proxy_ssl_set(ngx_mail_session_t *s,
+    ngx_mail_core_srv_conf_t *cscf)
 {
     ngx_pool_cleanup_t    *cln;
     ngx_mail_proxy_ctx_t  *p = s->proxy;

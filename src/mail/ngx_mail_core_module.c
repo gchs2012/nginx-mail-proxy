@@ -246,7 +246,7 @@ ngx_mail_core_create_srv_conf(ngx_conf_t *cf)
     cscf->mail_proxy_starttls = NGX_CONF_UNSET;
     cscf->mail_proxy_ssl_protocols = 0;
     ngx_str_null(&(cscf->mail_proxy_ssl_ciphers));
-#endif    
+#endif
     /* END:   Added by zc, 2018/9/25 */
 
     return cscf;
