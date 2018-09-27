@@ -28,10 +28,8 @@ static char *ngx_mail_core_resolver(ngx_conf_t *cf, ngx_command_t *cmd,
 /* BEGIN: Added by zc, 2018/9/26 */
 static char *ngx_mail_core_starttls(ngx_conf_t *cf, ngx_command_t *cmd,
     void *conf);
-/* END:   Added by zc, 2018/9/26 */
 
 
-/* BEGIN: Added by zc, 2018/9/26 */
 #if (NGX_MAIL_SSL)
 static ngx_conf_bitmask_t  ngx_mail_proxy_ssl_protocols[] = {
     { ngx_string("SSLv2"), NGX_SSL_SSLv2 },
@@ -734,7 +732,7 @@ ngx_mail_capabilities(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     return NGX_CONF_OK;
 }
 
-/* BEGIN: Added by zc, 2018/9/26 */
+
 /*****************************************************************************
     函 数 名 : ngx_mail_core_starttls
     功能描述 : 解析 mail_proxy_starttls 命令
@@ -766,5 +764,4 @@ ngx_mail_core_starttls(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     return NGX_CONF_OK;
 }
-/* END:   Added by zc, 2018/9/26 */
 
