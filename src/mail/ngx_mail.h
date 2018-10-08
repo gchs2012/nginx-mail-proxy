@@ -180,6 +180,17 @@ typedef enum {
 } ngx_smtp_state_e;
 
 
+/* BEGIN: Added by zc, 2018/10/8 */
+typedef enum {
+    ngx_smtp_proxy_starttls_no = 0,
+    ngx_smtp_proxy_starttls_yes,
+    ngx_smtp_proxy_starttls_ready,
+    ngx_smtp_proxy_starttls_start,
+    ngx_smtp_proxy_starttls_finish,
+} ngx_smtp_proxy_starttls_e;
+/* END:   Added by zc, 2018/10/8 */
+
+
 typedef struct {
     ngx_peer_connection_t   upstream;
     ngx_buf_t              *buffer;
@@ -227,6 +238,15 @@ typedef struct {
      * 1 - 上游支持ESMTP
      */
     unsigned                proxy_esmtp:1;
+
+    /*
+     * 0 - 上游无starttls
+     * 1 - 上游支持starttls
+     * 2 - 准备starttls认证
+     * 3 - 正在进行starttls认证
+     * 4 - starttls认证完成
+     */
+    unsigned                proxy_starttls:3;
     /* END:   Added by zc, 2018/9/26 */
 
     ngx_str_t               login;
