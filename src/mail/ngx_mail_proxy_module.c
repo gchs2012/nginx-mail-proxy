@@ -136,15 +136,12 @@ ngx_mail_proxy_protocol_handler(ngx_mail_session_t *s,
 
     default: /* NGX_MAIL_SMTP_PROTOCOL */
         c->read->handler = ngx_mail_proxy_smtp_handler;
-
-        /* BEGIN: Modified by zc, 2018/10/8 */
         if (s->proxy_starttls == ngx_smtp_proxy_starttls_finish) {
             s->mail_state = ngx_smtp_helo;
 
         } else {
             s->mail_state = ngx_smtp_start;
         }
-        /* END:   Modified by zc, 2018/10/8 */
         break;
     }
 }
