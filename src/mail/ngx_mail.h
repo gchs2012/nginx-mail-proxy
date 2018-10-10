@@ -195,11 +195,11 @@ typedef struct {
     ngx_peer_connection_t   upstream;
     ngx_buf_t              *buffer;
 
-    /* BEGIN: Added by zhangcan, 2018/9/26 */
+    /* BEGIN: Added by zc, 2018/9/26 */
 #if (NGX_MAIL_SSL)
     ngx_ssl_t              *ssl;
 #endif
-    /* END:   Added by zhangcan, 2018/9/26 */
+    /* END:   Added by zc, 2018/9/26 */
 } ngx_mail_proxy_ctx_t;
 
 
